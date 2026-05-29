@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="theme-color" content="#0d0d10"/>
+  <title>PDFX — Local PDF Toolkit</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,800;1,9..144,400&display=swap" rel="stylesheet">
+
+  <!-- PDF Libraries (CDN — only network requests this app makes) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+
+  <!-- App styles -->
+  <link rel="stylesheet" href="pdfx.css"/>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════
+       HEADER
+  ═══════════════════════════════════════ -->
+  <header class="hdr" id="hdr">
+    <div class="logo-wrap">
+      <div class="logo">PDF<em>X</em></div>
+      <div class="logo-sub">Local PDF Toolkit</div>
+    </div>
+    <span class="hdr-badge" id="net-badge" title="All processing is local. No uploads.">&#x25CF; LOCAL ONLY</span>
+    <div class="hdr-right">
+      <button class="hdr-icon-btn" onclick="openDownloadModal()" title="Download files" aria-label="Download">&#x2B07;</button>
+      <button class="hdr-icon-btn" id="backup-btn" onclick="showBackupStatus()" title="Browser backup status" aria-label="Backup status" style="color:var(--t3)">&#x2601;</button>
+      <button class="hdr-icon-btn" onclick="switchTab('about')" title="About &amp; Privacy" aria-label="About">&#x24D8;</button>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════
+       BACKUP BANNER (shown once, opt-in)
+  ═══════════════════════════════════════ -->
+  <div class="backup-banner hidden" id="backup-banner">
+    <div class="backup-banner-text">
+      <strong>Enable browser backup?</strong>
+      Saves workspace to your browser's local storage (IndexedDB).
+      Survives tab closes &amp; restarts — but <strong>not</strong> browser data clears,
+      private/incognito windows, or switching browsers.
+      Files in storage are <strong>not encrypted by this app</strong>.
+      This is a safety net, not a substitute for downloading.
+    </div>
+    <div class="backup-banner-btns">
+      <button class="bb-yes" onclick="enableBackup()">Enable</button>
+      <button class="bb-no" onclick="dismissBackup()">No thanks</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       APP BODY
+  ═══════════════════════════════════════ -->
+  <div class="app-body" id="app-body">
+
+    <!-- ── DESKTOP LEFT SIDEBAR ── -->
+    <aside class="desk-left" id="desk-left">
+
+      <!-- Full header (shown when expanded) -->
+      <div class="ws-header" id="desk-ws-header">
+        <div class="ws-header-row">
+          <span class="ws-title">Workspace</span>
+          <button class="collapse-btn" onclick="toggleDeskLeft()" title="Collapse sidebar" aria-label="Collapse sidebar">&#x25C0;</button>
+        </div>
+        <div class="mem-row">
+          <div class="mem-bar-wrap"><div class="mem-bar" id="desk-mem-bar" style="width:0%"></div></div>
+          <span class="mem-label" id="desk-mem-label">0 B</span>
+        </div>
+      </div>
+
+      <!-- Icon-only strip (shown when collapsed) -->
+      <div class="icon-strip" id="desk-icon-strip"></div>
+
+      <!-- Expand button (shown when collapsed) -->
+      <div class="expand-wrap hidden" id="desk-expand-wrap">
+        <button class="collapse-btn" onclick="toggleDeskLeft()" title="Expand sidebar" aria-label="Expand sidebar">&#x25BA;</button>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="ws-actions" id="desk-ws-actions">
+        <button class="ws-btn ws-btn-primary" onclick="triggerLoad()">+ Add</button>
+        <button class="ws-btn" onclick="openDownloadModal()">&#x2B07;</button>
+        <button class="ws-btn ws-btn-danger hidden" id="desk-clear-btn" onclick="clearWorkspace()">&#x2715;</button>
+      </div>
+
+      <!-- File cards -->
+      <div class="workspace-scroll" id="desk-ws-scroll">
+        <div class="ws-empty" id="desk-ws-empty">
+          <div class="ws-empty-icon">&#x1F4C2;</div>
+          No files yet.<br>
+          Add PDFs to begin.<br><br>
+          Originals are never<br>modified — ever.
+        </div>
+      </div>
+
+    </aside><!-- /desk-left -->
+
+    <!-- ── LANDSCAPE LEFT COLUMN ── -->
+    <aside class="landscape-left hidden" id="landscape-left">
+      <div class="ls-header">
+        <span class="ws-title" style="font-size:8px">Files</span>
+        <button class="collapse-btn" style="width:22px;height:22px;font-size:9px" onclick="toggleLandscapeLeft()" title="Collapse" aria-label="Collapse">&#x25C0;</button>
+      </div>
+      <div class="icon-strip" id="ls-icon-strip"></div>
+      <div class="workspace-scroll hidden" id="ls-ws-scroll">
+        <div id="ls-ws-cards"></div>
+      </div>
+    </aside>
+
+    <!-- ── RIGHT: PANEL AREA ── -->
+    <div class="panel-area" id="panel-area">
+
+      <!-- ┌─────────────────────────┐
+           │  FILES PANEL (mobile)   │
+           └─────────────────────────┘ -->
+      <section class="panel panel-files active" id="panel-files" aria-label="Files workspace">
+        <div class="ws-header">
+          <div class="ws-header-row">
+            <span class="ws-title">Workspace</span>
+          </div>
+          <div class="mem-row">
+            <div class="mem-bar-wrap"><div class="mem-bar" id="mob-mem-bar" style="width:0%"></div></div>
+            <span class="mem-label" id="mob-mem-label">0 B</span>
+          </div>
+        </div>
+        <div class="ws-actions">
+          <button class="ws-btn ws-btn-primary" onclick="triggerLoad()">+ Add Files</button>
+          <button class="ws-btn" onclick="openDownloadModal()">&#x2B07; Download</button>
+          <button class="ws-btn ws-btn-danger hidden" id="mob-clear-btn" onclick="clearWorkspace()">&#x2715; Clear</button>
+        </div>
+        <div class="workspace-scroll" id="mob-ws-scroll">
+          <div class="ws-empty" id="mob-ws-empty">
+            <div class="ws-empty-icon">&#x1F4C2;</div>
+            No files yet.<br>
+            Tap <strong>+ Add Files</strong> to begin.<br><br>
+            Your originals are<br>
+            <strong>never</strong> modified — ever.
+          </div>
+        </div>
+      </section>
+
+      <!-- ┌─────────────────────────┐
+           │  TOOLS PANEL            │
+           └─────────────────────────┘ -->
+      <section class="panel panel-tools" id="panel-tools" aria-label="Tools">
+
+        <!-- Persistent file strip -->
+        <div class="file-strip" id="tools-file-strip">
+          <span class="file-strip-empty" id="tools-strip-empty">No file selected — go to Files first</span>
+          <span class="file-strip-icon hidden" id="tools-strip-icon">&#x1F4C4;</span>
+          <div class="file-strip-info hidden" id="tools-strip-info">
+            <div class="file-strip-name" id="tools-strip-name"></div>
+            <div class="file-strip-meta" id="tools-strip-meta"></div>
+          </div>
+          <button class="file-strip-change hidden" id="tools-strip-change" onclick="switchTab('files')">Change &#x25B8;</button>
+        </div>
+
+        <!-- Tool grid or active tool — swapped by JS -->
+        <div class="tools-inner" id="tools-inner">
+
+          <!-- TOOL GRID (default view) -->
+          <div class="tool-grid-scroll" id="tool-grid-scroll">
+
+            <div class="tool-group-label">View &amp; Read</div>
+            <div class="tool-grid">
+              <div class="tool-card" onclick="switchTab('view')" title="View PDF">
+                <div class="tool-card-icon">&#x1F441;</div>
+                <div class="tool-card-name">View</div>
+              </div>
+              <div class="tool-card" onclick="openReader()" title="Clean reader mode">
+                <div class="tool-card-icon">&#x1F4D6;</div>
+                <div class="tool-card-name">Reader</div>
+              </div>
+              <div class="tool-card" onclick="openAnnotate()" title="Highlight and annotate">
+                <div class="tool-card-icon">&#x270F;&#xFE0F;</div>
+                <div class="tool-card-name">Annotate</div>
+              </div>
+            </div>
+
+            <div class="tool-group-label">Organize</div>
+            <div class="tool-grid">
+              <div class="tool-card" onclick="openTool('merge','&#x1F517;','Merge PDFs')" title="Combine PDFs">
+                <div class="tool-card-icon">&#x1F517;</div>
+                <div class="tool-card-name">Merge</div>
+              </div>
+              <div class="tool-card" onclick="openTool('split','&#x2702;&#xFE0F;','Split PDF')" title="Split into parts">
+                <div class="tool-card-icon">&#x2702;&#xFE0F;</div>
+                <div class="tool-card-name">Split</div>
+              </div>
+              <div class="tool-card" onclick="openTool('reorder','&#x1F500;','Reorder Pages')" title="Move pages around">
+                <div class="tool-card-icon">&#x1F500;</div>
+                <div class="tool-card-name">Reorder</div>
+              </div>
+              <div class="tool-card" onclick="openTool('rotate','&#x1F504;','Rotate Pages')" title="Rotate pages">
+                <div class="tool-card-icon">&#x1F504;</div>
+                <div class="tool-card-name">Rotate</div>
+              </div>
+              <div class="tool-card" onclick="openTool('pages','&#x1F5C2;','Page Manager')" title="Delete, insert, duplicate pages">
+                <div class="tool-card-icon">&#x1F5C2;</div>
+                <div class="tool-card-name">Pages</div>
+              </div>
+            </div>
+
+            <div class="tool-group-label">Transform</div>
+            <div class="tool-grid">
+              <div class="tool-card" onclick="openTool('compress','&#x1F4E6;','Compress')" title="Reduce file size">
+                <div class="tool-card-icon">&#x1F4E6;</div>
+                <div class="tool-card-name">Compress</div>
+              </div>
+              <div class="tool-card" onclick="openTool('watermark','&#x1F510;','Watermark')" title="Add text watermark">
+                <div class="tool-card-icon">&#x1F510;</div>
+                <div class="tool-card-name">Watermark</div>
+              </div>
+              <div class="tool-card" onclick="openTool('headerfooter','&#x1F4D1;','Header &amp; Footer')" title="Add header and footer text">
+                <div class="tool-card-icon">&#x1F4D1;</div>
+                <div class="tool-card-name">Header/Footer</div>
+              </div>
+              <div class="tool-card" onclick="openTool('pagenums','#&#xFE0F;&#x20E3;','Page Numbers')" title="Add page numbers">
+                <div class="tool-card-icon">#&#xFE0F;&#x20E3;</div>
+                <div class="tool-card-name">Page Nums</div>
+              </div>
+              <div class="tool-card" onclick="openTool('grayscale','&#x1F5A4;','Grayscale')" title="Convert to grayscale">
+                <div class="tool-card-icon">&#x1F5A4;</div>
+                <div class="tool-card-name">Grayscale</div>
+              </div>
+              <div class="tool-card" onclick="openTool('img2pdf','&#x1F5BC;&#xFE0F;','Image &#x2192; PDF')" title="Wrap images in a PDF">
+                <div class="tool-card-icon">&#x1F5BC;&#xFE0F;</div>
+                <div class="tool-card-name">Image&#x2192;PDF</div>
+              </div>
+            </div>
+
+            <div class="tool-group-label">Extract</div>
+            <div class="tool-grid">
+              <div class="tool-card" onclick="openTool('extracttext','&#x1F4DD;','Extract Text')" title="Extract text content">
+                <div class="tool-card-icon">&#x1F4DD;</div>
+                <div class="tool-card-name">Extract Text</div>
+              </div>
+              <div class="tool-card" onclick="openTool('pdf2img','&#x1F305;','PDF &#x2192; Images')" title="Export pages as images">
+                <div class="tool-card-icon">&#x1F305;</div>
+                <div class="tool-card-name">PDF&#x2192;Images</div>
+              </div>
+              <div class="tool-card" onclick="openTool('redact','&#x25A0;','Redact')" title="Permanently black out content">
+                <div class="tool-card-icon">&#x25A0;</div>
+                <div class="tool-card-name">Redact</div>
+              </div>
+            </div>
+
+            <div class="tool-group-label">Security</div>
+            <div class="tool-grid">
+              <div class="tool-card" onclick="openTool('protect','&#x1F512;','Password Protect')" title="Encrypt with password">
+                <div class="tool-card-icon">&#x1F512;</div>
+                <div class="tool-card-name">Protect</div>
+              </div>
+              <div class="tool-card" onclick="openTool('unlock','&#x1F513;','Remove Password')" title="Remove password protection">
+                <div class="tool-card-icon">&#x1F513;</div>
+                <div class="tool-card-name">Unlock</div>
+              </div>
+            </div>
+
+          </div><!-- /tool-grid-scroll -->
+
+        </div><!-- /tools-inner -->
+
+      </section><!-- /panel-tools -->
+
+      <!-- ┌─────────────────────────┐
+           │  VIEW PANEL             │
+           └─────────────────────────┘ -->
+      <section class="panel panel-view" id="panel-view" aria-label="PDF Viewer">
+
+        <!-- Persistent file strip -->
+        <div class="file-strip" id="view-file-strip">
+          <span class="file-strip-empty" id="view-strip-empty">No file selected</span>
+          <span class="file-strip-icon hidden" id="view-strip-icon">&#x1F4C4;</span>
+          <div class="file-strip-info hidden" id="view-strip-info">
+            <div class="file-strip-name" id="view-strip-name"></div>
+            <div class="file-strip-meta" id="view-strip-meta"></div>
+          </div>
+          <button class="file-strip-change hidden" id="view-strip-change" onclick="switchTab('files')">Change &#x25B8;</button>
+        </div>
+
+        <!-- Viewer controls -->
+        <div class="viewer-ctrl" id="viewer-ctrl">
+          <button class="viewer-btn" onclick="vPrev()" aria-label="Previous page">&#x25C0;</button>
+          <span class="viewer-info" id="v-page-info">&#x2014; / &#x2014;</span>
+          <button class="viewer-btn" onclick="vNext()" aria-label="Next page">&#x25BA;</button>
+          <div class="viewer-divider"></div>
+          <button class="viewer-btn" onclick="vZoom(-0.2)" aria-label="Zoom out">&#x2212;</button>
+          <span class="viewer-info" id="v-zoom-info">130%</span>
+          <button class="viewer-btn" onclick="vZoom(0.2)" aria-label="Zoom in">+</button>
+          <span class="viewer-spacer"></span>
+          <button class="viewer-btn" onclick="openReader()" title="Reader mode" aria-label="Reader mode">&#x1F4D6;</button>
+          <button class="viewer-btn" onclick="openAnnotate()" title="Annotate" aria-label="Annotate">&#x270F;&#xFE0F;</button>
+          <button class="viewer-btn" onclick="dlViewingFile()" title="Download" aria-label="Download current file">&#x2B07;</button>
+        </div>
+
+        <!-- Viewer body: thumb strip + pages -->
+        <div class="viewer-body">
+          <div class="thumb-col" id="thumb-col"></div>
+          <div class="viewer-pages" id="viewer-pages">
+            <div class="viewer-placeholder">
+              <div style="font-size:36px;margin-bottom:10px">&#x1F4C4;</div>
+              Select a PDF and tap View,<br>or tap the View button on any file card.
+            </div>
+          </div>
+        </div>
+
+      </section><!-- /panel-view -->
+
+      <!-- ┌─────────────────────────┐
+           │  ABOUT PANEL            │
+           └─────────────────────────┘ -->
+      <section class="panel panel-about" id="panel-about" aria-label="About">
+        <div class="about-scroll">
+
+          <div class="about-section">
+            <div class="about-section-title">What is PDFX</div>
+            <div class="about-text">
+              Browser-based PDF toolkit. <strong>Everything runs on your device.</strong>
+              pdf.js and pdf-lib load once from a CDN when you first open the page —
+              that is the only network request this app ever makes. After that, no data
+              of any kind is sent anywhere. Your files are read directly into browser
+              memory, the same way any desktop app reads a file, and never leave your device.
+            </div>
+            <div class="about-box about-box-ok">
+              &#x2713; Zero uploads &nbsp;&#xB7;&nbsp; Zero server &nbsp;&#xB7;&nbsp; Zero account<br>
+              &#x2713; All operations create new files — originals always untouched<br>
+              &#x2713; Files never leave your device
+            </div>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-title">Memory &amp; Limits (v1)</div>
+            <div class="about-text">
+              <strong>Per file:</strong> under 50MB loads freely &nbsp;&#xB7;&nbsp;
+              50–100MB shows a warning &nbsp;&#xB7;&nbsp; over 100MB is blocked<br>
+              <strong>Workspace total:</strong> 200MB shows a warning &nbsp;&#xB7;&nbsp; 300MB hard limit<br>
+              These limits are deliberately conservative for v1 to prevent crashes,
+              and will be revised after stability testing.
+            </div>
+            <button class="detail-toggle" onclick="toggleDetail('mem-detail')" aria-expanded="false">&#x25B8; Show memory details</button>
+            <div class="detail-content hidden" id="mem-detail">
+              <div class="about-text" id="mem-detail-text">Loading…</div>
+            </div>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-title">Non-Destructive Guarantee</div>
+            <div class="about-text">
+              Every tool in PDFX creates a <strong>new file</strong>. Your original stays in the
+              workspace, clearly marked ORIGINAL. When you download an original it saves as
+              <strong>filename_copy.pdf</strong> — a different name — so it cannot accidentally
+              overwrite your real file on disk.
+            </div>
+            <div class="about-box about-box-ok">
+              &#x2713; Original file on your computer: untouched<br>
+              &#x2713; Every operation produces a new workspace file<br>
+              &#x2713; You can always return to the original in the workspace
+            </div>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-title">File Naming Conventions</div>
+            <div class="about-text">
+              <strong>Manually renamed:</strong> downloads exactly as you typed it<br>
+              <strong>Original, unchanged:</strong> filename_copy.pdf<br>
+              <strong>One operation applied:</strong> filename_watermarked.pdf<br>
+              <strong>Multiple operations, in order:</strong> filename_split-p1-3_protected.pdf<br>
+              <strong>Merged file:</strong> firstfilename_merged.pdf<br>
+              <strong>Split file:</strong> filename_split-p1-3.pdf (includes page range)<br>
+              <strong>Annotated file:</strong> filename_annotated.pdf
+            </div>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-title">Storage &amp; Browser Backup</div>
+            <div class="about-text">
+              By default, files only exist in JavaScript memory (RAM). If the tab closes,
+              crashes, or refreshes, <strong>unsaved work is gone. There is no autosave.</strong>
+            </div>
+            <div class="about-box about-box-warn">
+              <strong>Browser backup (opt-in):</strong> stores files in IndexedDB, your
+              browser's local database. Survives tab closes and browser restarts.<br><br>
+              <strong>Can be lost if you:</strong> clear browser data &nbsp;&#xB7;&nbsp;
+              use private/incognito mode &nbsp;&#xB7;&nbsp; switch to a different browser
+              &nbsp;&#xB7;&nbsp; your browser clears storage under memory pressure<br><br>
+              This is a safety net, not a guarantee.
+              <strong>Download your files to keep them permanently.</strong>
+            </div>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-title">Encryption &amp; Security</div>
+            <div class="about-text">
+              This app adds <strong>no encryption</strong> to your files beyond what
+              your browser and operating system already provide.
+            </div>
+            <div class="about-box about-box-danger">
+              <strong>Files in browser memory:</strong> not encrypted by this app<br>
+              <strong>IndexedDB backup:</strong> not encrypted by this app<br>
+              <strong>Device-level encryption</strong> (FileVault, BitLocker, etc.):
+              outside this app's control — depends on your device setup<br><br>
+              <strong>What IS encrypted:</strong> password-protected output PDFs use real
+              PDF encryption once downloaded. Redacted content is permanently removed
+              from output files.<br><br>
+              <strong>For sensitive documents:</strong> open the app, do your work,
+              download the result immediately, clear the workspace when done.
+              Do not leave sensitive files sitting in the workspace longer than necessary.
+            </div>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-title">Browser Extensions Warning</div>
+            <div class="about-text">
+              <strong>This app cannot detect, block, or protect against browser extensions.</strong>
+              Extensions with "read and write access to all websites" can see everything
+              on this page including any PDF content you are working with.
+            </div>
+            <div class="about-box about-box-warn">
+              <strong>Extension categories that commonly have broad page access:</strong><br>
+              Password managers &nbsp;&#xB7;&nbsp; Screen capture &amp; recording tools
+              &nbsp;&#xB7;&nbsp; Clipboard managers &nbsp;&#xB7;&nbsp; Grammar &amp;
+              writing assistants &nbsp;&#xB7;&nbsp; Ad blockers &amp; privacy tools
+              &nbsp;&#xB7;&nbsp; Translation extensions<br><br>
+              <strong>To disable extensions for a session:</strong><br>
+              Chrome: copy <strong>chrome://extensions</strong> into your address bar<br>
+              Firefox: copy <strong>about:addons</strong> into your address bar<br>
+              Safari: Safari menu → Settings → Extensions → disable all
+            </div>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-title">Tools Reference</div>
+            <div class="about-text">
+              <strong>Merge</strong> — combine multiple PDFs in any order you set<br>
+              <strong>Split</strong> — by page range, every N pages, or each page separately<br>
+              <strong>Reorder</strong> — drag/move pages, save as new file<br>
+              <strong>Rotate</strong> — per page or all pages, 90°/180°/270°<br>
+              <strong>Pages</strong> — delete pages, insert blank pages, duplicate pages<br>
+              <strong>Compress</strong> — structural optimization and metadata removal.
+              Note: image recompression is not available in browser-only processing<br>
+              <strong>Watermark</strong> — diagonal text overlay, configurable opacity and color<br>
+              <strong>Header/Footer</strong> — left/center/right zones supporting
+              {page}, {total}, {date}, {filename} tokens<br>
+              <strong>Page Numbers</strong> — multiple positions and format options<br>
+              <strong>Grayscale</strong> — rasterizes pages into grayscale JPEG images.
+              Note: may increase file size at high DPI settings<br>
+              <strong>Image→PDF</strong> — wraps JPG/PNG/WEBP images into a PDF,
+              each image becomes one page<br>
+              <strong>Extract Text</strong> — extracts selectable text only.
+              Does not perform OCR — scanned image PDFs will return no text<br>
+              <strong>PDF→Images</strong> — exports each page as a PNG or JPEG file<br>
+              <strong>Redact</strong> — draw rectangles over content to permanently
+              black it out in the output file. Always verify redacted areas before sharing<br>
+              <strong>Protect</strong> — encrypt with a password using pdf-lib's
+              built-in encryption. Controls print and copy permissions<br>
+              <strong>Unlock</strong> — remove password protection.
+              You must know the current password<br>
+              <strong>Annotate</strong> — highlights and sticky notes, burned
+              permanently into a new output file<br>
+              <strong>Reader</strong> — full-bleed distraction-free reading with
+              column crop/zoom-lock for research papers and multi-column layouts
+            </div>
+          </div>
+
+          <div class="about-section">
+            <div class="about-section-title">Changelog</div>
+            <div class="about-text">
+              <strong>v1.0 — 2026</strong><br>
+              Initial release. All v1 tools implemented. Mobile-first responsive layout
+              supporting portrait, landscape, and desktop modes. Bottom tab bar navigation
+              on mobile. Non-destructive workspace with provenance tracking and parent-child
+              file relationships. Deliberate conservative limits (100MB per file,
+              300MB workspace). Opt-in browser backup with full explanation.
+              Full privacy, security, and extension disclosure.
+            </div>
+          </div>
+
+        </div><!-- /about-scroll -->
+      </section><!-- /panel-about -->
+
+    </div><!-- /panel-area -->
+
+  </div><!-- /app-body -->
+
+  <!-- ═══════════════════════════════════════
+       STATUS BAR
+  ═══════════════════════════════════════ -->
+  <div class="status-bar" id="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">Ready — add files to begin</span>
+    <div class="net-indicator">
+      <div class="net-dot"></div>
+      <span>CDN loaded · no further network activity</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       BOTTOM TAB BAR (mobile)
+  ═══════════════════════════════════════ -->
+  <nav class="tab-bar" id="tab-bar" aria-label="Main navigation">
+    <div class="tab-bar-inner">
+      <button class="tab-btn active" id="tab-files" onclick="switchTab('files')" aria-label="Files">
+        <span class="tab-icon">&#x1F4C2;</span>
+        <span class="tab-label">Files</span>
+      </button>
+      <button class="tab-btn" id="tab-tools" onclick="switchTab('tools')" aria-label="Tools">
+        <span class="tab-icon">&#x1F527;</span>
+        <span class="tab-label">Tools</span>
+      </button>
+      <button class="tab-btn" id="tab-view" onclick="switchTab('view')" aria-label="View">
+        <span class="tab-icon">&#x1F441;</span>
+        <span class="tab-label">View</span>
+      </button>
+      <button class="tab-btn" id="tab-about" onclick="switchTab('about')" aria-label="About">
+        <span class="tab-icon">&#x24D8;</span>
+        <span class="tab-label">About</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════
+       READER OVERLAY (full-bleed)
+  ═══════════════════════════════════════ -->
+  <div class="reader-overlay hidden" id="reader-overlay" role="dialog" aria-label="Reader mode">
+    <div class="reader-scroll" id="reader-scroll">
+      <div class="reader-canvas-wrap" id="reader-canvas-wrap">
+        <canvas id="reader-base-canvas" class="reader-base-canvas"></canvas>
+        <canvas id="reader-crop-canvas" class="reader-crop-canvas"></canvas>
+      </div>
+    </div>
+    <!-- Floating controls -->
+    <div class="reader-float" id="reader-float">
+      <div class="reader-mini-bar hidden" id="reader-mini-bar">
+        <button class="reader-mini-btn" onclick="rPrev()" aria-label="Previous page">&#x25C0;</button>
+        <span class="reader-page-info" id="reader-page-info">1 / 1</span>
+        <button class="reader-mini-btn" onclick="rNext()" aria-label="Next page">&#x25BA;</button>
+        <button class="reader-mini-btn" onclick="rZoom(-0.2)" aria-label="Zoom out">&#x2212;</button>
+        <button class="reader-mini-btn" onclick="rZoom(0.2)" aria-label="Zoom in">+</button>
+        <button class="reader-mini-btn" onclick="clearReaderCrop()" title="Clear crop region" aria-label="Clear crop">&#x22A0;</button>
+      </div>
+      <button class="reader-fab reader-fab-ctrl" onclick="toggleReaderBar()" title="Controls" aria-label="Show controls">&#x2630;</button>
+      <button class="reader-fab reader-fab-exit" onclick="closeReader()" title="Exit reader" aria-label="Exit reader">&#x2715;</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       ANNOTATE OVERLAY (full-bleed)
+  ═══════════════════════════════════════ -->
+  <div class="ann-overlay hidden" id="ann-overlay" role="dialog" aria-label="Annotation mode">
+
+    <!-- Annotation toolbar -->
+    <div class="ann-toolbar" id="ann-toolbar">
+      <button class="ann-tool-btn active" id="ann-hl-btn" onclick="setAnnTool('highlight')">Highlight</button>
+      <button class="ann-tool-btn" id="ann-note-btn" onclick="setAnnTool('note')">Sticky Note</button>
+      <div class="ann-divider"></div>
+      <div class="ann-color active" style="background:#ffec60" onclick="setAnnColor('#ffec60', this)" title="Yellow" aria-label="Yellow highlight"></div>
+      <div class="ann-color" style="background:#60f0a0" onclick="setAnnColor('#60f0a0', this)" title="Green" aria-label="Green highlight"></div>
+      <div class="ann-color" style="background:#60b0f0" onclick="setAnnColor('#60b0f0', this)" title="Blue" aria-label="Blue highlight"></div>
+      <div class="ann-color" style="background:#f09060" onclick="setAnnColor('#f09060', this)" title="Orange" aria-label="Orange highlight"></div>
+      <button class="ann-discard-btn" onclick="discardAnnotations()">Discard</button>
+      <button class="ann-save-btn" onclick="saveAnnotations()">Save Copy</button>
+    </div>
+
+    <!-- Annotation viewer controls -->
+    <div class="viewer-ctrl" style="background:var(--s1)">
+      <button class="viewer-btn" onclick="annPrev()" aria-label="Previous page">&#x25C0;</button>
+      <span class="viewer-info" id="ann-page-info">&#x2014; / &#x2014;</span>
+      <button class="viewer-btn" onclick="annNext()" aria-label="Next page">&#x25BA;</button>
+      <button class="viewer-btn" onclick="vZoom(-0.2)" aria-label="Zoom out">&#x2212;</button>
+      <button class="viewer-btn" onclick="vZoom(0.2)" aria-label="Zoom in">+</button>
+      <button class="viewer-btn" onclick="undoLastAnnotation()">Undo</button>
+    </div>
+
+    <!-- Canvas area -->
+    <div class="ann-canvas-scroll">
+      <div class="ann-canvas-wrap" id="ann-canvas-wrap">
+        <canvas id="ann-base-canvas" class="ann-base-canvas"></canvas>
+        <canvas id="ann-draw-canvas" class="ann-draw-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Footer notice -->
+    <div class="ann-footer">
+      &#x26A0; Annotation mode active — other tools are disabled until you save or discard.
+      Annotations are burned permanently into a new output file. Your original is untouched.
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       DOWNLOAD MODAL
+  ═══════════════════════════════════════ -->
+  <div class="modal-backdrop hidden" id="download-modal" role="dialog" aria-label="Download files">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Download Files</div>
+        <button class="modal-close" onclick="closeModal('download-modal')" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-notice">
+          &#x2713; Originals download as <strong>filename_copy.pdf</strong> —
+          your actual files on disk are never touched.
+        </div>
+        <div class="dl-list" id="dl-list"></div>
+        <div class="dl-count" id="dl-count">0 selected</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="downloadSelected()" id="dl-go-btn" disabled>&#x2B07; Download Selected</button>
+        <button class="btn btn-secondary" onclick="downloadAll()">Download All</button>
+        <button class="btn btn-secondary" onclick="downloadOutputsOnly()">Outputs Only</button>
+        <button class="btn btn-secondary" onclick="dlSelectAll()">Select All</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       WARNING / CONFIRM MODAL
+  ═══════════════════════════════════════ -->
+  <div class="modal-backdrop hidden" id="warn-modal" role="dialog" aria-label="Warning">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <div class="modal-title" id="warn-modal-title">Warning</div>
+        <button class="modal-close" onclick="closeModal('warn-modal')" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-body">
+        <div class="about-text" id="warn-modal-body"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="warn-modal-ok">Continue</button>
+        <button class="btn btn-secondary" onclick="closeModal('warn-modal'); warnCancelCallback && warnCancelCallback()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       BACKUP MODAL
+  ═══════════════════════════════════════ -->
+  <div class="modal-backdrop hidden" id="backup-modal" role="dialog" aria-label="Browser backup settings">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <div class="modal-title">Browser Backup</div>
+        <button class="modal-close" onclick="closeModal('backup-modal')" aria-label="Close">&#x2715;</button>
+      </div>
+      <div class="modal-body">
+        <div class="about-text" id="backup-modal-body"></div>
+      </div>
+      <div class="modal-footer" id="backup-modal-footer"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       HIDDEN FILE INPUT
+  ═══════════════════════════════════════ -->
+  <input
+    type="file"
+    id="main-file-input"
+    accept=".pdf,image/jpeg,image/png,image/webp"
+    multiple
+    style="display:none"
+    onchange="handleFileInputChange(this)"
+    aria-label="Add files"
+  >
+
+  <!-- ═══════════════════════════════════════
+       TOAST CONTAINER
+  ═══════════════════════════════════════ -->
+  <div class="toast-container" id="toast-container" aria-live="polite" aria-label="Notifications"></div>
+
+  <!-- ═══════════════════════════════════════
+       JS FILES (load order matters)
+  ═══════════════════════════════════════ -->
+  <script src="pdfx-workspace.js"></script>
+  <script src="pdfx-viewer.js"></script>
+  <script src="pdfx-tools.js"></script>
+  <script src="pdfx-ui.js"></script>
+
+</body>
+</html>
